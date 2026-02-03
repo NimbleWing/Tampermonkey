@@ -121,7 +121,7 @@
             background: rgba(30,30,40,0.95); color: white; border-radius: 16px;
             box-shadow: 0 6px 30px rgba(0,0,0,0.5);
             z-index: 2147483647 !important; font-family: 'Segoe UI', system-ui;
-            min-width: 260px; border: 1px solid rgba(255,255,255,0.1);
+            width: 300px; border: 1px solid rgba(255,255,255,0.1);
         `;
         panel.innerHTML = `
             <div class="drag-handle" style="
