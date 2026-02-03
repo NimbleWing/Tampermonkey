@@ -149,6 +149,7 @@
                     <strong style="font-size: 15px; background: linear-gradient(90deg, #60a5fa, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
                         ${iconHtml}${displayName}
                     </strong>
+                    <span id="script-version" style="font-size: 10px; color: rgba(255,255,255,0.3); margin-left: 4px;"></span>
                 </div>
 
                 <div style="font-size:12px; color:#60a5fa; margin-bottom: 6px;">
@@ -317,6 +318,11 @@
         };
 
         document.getElementById('current-index').textContent = currentIndex;
+
+        const versionEl = document.getElementById('script-version');
+        if (versionEl && scriptInfo.icon) {
+            versionEl.textContent = 'v' + (GM_info?.script?.version || '1.0.0');
+        }
 
         return panel;
     }
