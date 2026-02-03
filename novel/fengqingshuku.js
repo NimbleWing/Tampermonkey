@@ -123,6 +123,7 @@
                 padding: 18px; box-shadow: 0 6px 30px rgba(0,0,0,0.5);
                 z-index: 2147483647 !important; font-family: 'Segoe UI', system-ui;
                 min-width: 260px; border: 1px solid rgba(255,255,255,0.1);
+                cursor: move;
             ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
                     <div style="
@@ -180,24 +181,71 @@
                 ">
                     💡 文件名格式: <span style="color:#f472b6; font-weight:500">1##标题.txt</span><br>
                 </div>
-            </div>
-            <style>
-                @keyframes pulse {
-                    0% { opacity: 0.6; transform: scale(0.95); }
-                    50% { opacity: 1; transform: scale(1); }
-                    100% { opacity: 0.6; transform: scale(0.95); }
-                }
-                #novel-control-panel button:hover {
-                    transform: translateY(-1px);
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                    transition: all 0.2s;
-                }
-                #novel-control-panel button:active {
-                    transform: translateY(0);
-                }
-            </style>
+
+                <style>
+                    @keyframes pulse {
+                        0% { opacity: 0.6; transform: scale(0.95); }
+                        50% { opacity: 1; transform: scale(1); }
+                        100% { opacity: 0.6; transform: scale(0.95); }
+                    }
+                    #novel-control-panel:hover {
+                        box-shadow: 0 8px 40px rgba(0,0,0,0.6) !important;
+                    }
+                    #novel-control-panel button:hover {
+                        transform: translateY(-1px);
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+                        transition: all 0.2s;
+                    }
+                    #novel-control-panel button:active {
+                        transform: translateY(0);
+                    }
+                </style>
         `;
         document.body.appendChild(panel);
+
+        const savedPos = GM_getValue(getStateKey(siteConfig.siteKey, 'panel_pos'), null);
+        if (savedPos) {
+            panel.style.left = savedPos.left + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom = savedPos.bottom + 'px';
+        }
+
+        let isDragging = false;
+        let startX, startY, startLeft, startBottom;
+
+        panel.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = panel.getBoundingClientRect();
+            startLeft = rect.left;
+            startBottom = window.innerHeight - rect.bottom;
+            panel.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = startY - e.clientY;
+            const newLeft = Math.max(0, startLeft + dx);
+            const newBottom = Math.max(0, startBottom + dy);
+            panel.style.left = newLeft + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom = newBottom + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            panel.style.cursor = 'move';
+            const rect = panel.getBoundingClientRect();
+            GM_setValue(getStateKey(siteConfig.siteKey, 'panel_pos'), {
+                left: rect.left,
+                bottom: window.innerHeight - rect.bottom
+            });
+        });
 
         panel.querySelector('#btn-start').onclick = () => {
             GM_setValue(getStateKey(siteConfig.siteKey, 'active'), true);
