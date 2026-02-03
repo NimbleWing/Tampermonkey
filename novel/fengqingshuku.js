@@ -32,7 +32,9 @@
             TITLE_SELECTOR: '.chapter_title',
             CONTENT_SELECTOR: '.chapter_con p',
             NAV_SELECTOR: '.prev_next',
-            NEXT_KEYWORD: '下一章',
+            NEXT_KEYWORDS: ['下一章'],
+            PREV_KEYWORDS: ['上一章', '目录', '返回', '首页'],
+            STRICT_NEXT_MODE: true,
             DELAY_MIN: 2500,
             DELAY_MAX: 4000,
             MAX_RETRY: 3,
@@ -45,7 +47,9 @@
             TITLE_SELECTOR: '.chapter_title',
             CONTENT_SELECTOR: '.chapter_con p',
             NAV_SELECTOR: '.prev_next',
-            NEXT_KEYWORD: '下一章',
+            NEXT_KEYWORDS: ['下一章'],
+            PREV_KEYWORDS: ['上一章', '目录', '返回', '首页'],
+            STRICT_NEXT_MODE: true,
             DELAY_MIN: 1500,
             DELAY_MAX: 2000,
             MAX_RETRY: 3,
@@ -58,7 +62,9 @@
             TITLE_SELECTOR: 'tbody h1',
             CONTENT_SELECTOR: 'tbody td div:nth-child(6) p',
             NAV_SELECTOR: 'body',
-            NEXT_KEYWORD: '下一章',
+            NEXT_KEYWORDS: ['下一章'],
+            PREV_KEYWORDS: ['上一章', '目录', '返回', '首页'],
+            STRICT_NEXT_MODE: true,
             DELAY_MIN: 2500,
             DELAY_MAX: 4000,
             MAX_RETRY: 3,
@@ -496,16 +502,35 @@
         const nav = document.querySelector(siteConfig.NAV_SELECTOR);
         if (!nav) return null;
 
+        // 阶段1：精确匹配 NEXT_KEYWORDS
         for (const a of nav.querySelectorAll('a')) {
-            if (a.textContent.includes(siteConfig.NEXT_KEYWORD) && a.href && !a.href.includes('#')) {
-                return a.href;
+            for (const keyword of siteConfig.NEXT_KEYWORDS) {
+                if (a.textContent.includes(keyword) && a.href && !a.href.includes('#')) {
+                    return a.href;
+                }
             }
         }
 
-        const links = Array.from(nav.querySelectorAll('a')).filter(a =>
-            a.href && !a.href.includes('#') && a.href !== window.location.href
-        );
-        return links.length > 0 ? links[links.length - 1].href : null;
+        // 阶段2：兜底策略（仅当 STRICT_NEXT_MODE = false 时）
+        if (!siteConfig.STRICT_NEXT_MODE) {
+            const links = Array.from(nav.querySelectorAll('a')).filter(a => {
+                // 基础过滤
+                if (!a.href || a.href.includes('#') || a.href === window.location.href) {
+                    return false;
+                }
+                // 排除 PREV_KEYWORDS 中的关键词
+                for (const keyword of siteConfig.PREV_KEYWORDS) {
+                    if (a.textContent.includes(keyword)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+            return links.length > 0 ? links[links.length - 1].href : null;
+        }
+
+        // 阶段3：严格模式下返回 null
+        return null;
     }
 
     // ================== 🔢 控制台函数 ==================
