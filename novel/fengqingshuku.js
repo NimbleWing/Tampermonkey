@@ -127,7 +127,16 @@
             <div class="drag-handle" style="
                 position: absolute; top: 0; left: 0; right: 0; height: 35px;
                 cursor: grab; border-radius: 16px 16px 0 0; z-index: 10;
-            "></div>
+                display: flex; align-items: center; justify-content: center;
+                background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+                border-bottom: 1px solid rgba(255,255,255,0.05);
+            ">
+                <div style="display: flex; gap: 4px;">
+                    <div style="width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.3);"></div>
+                    <div style="width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.3);"></div>
+                    <div style="width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.3);"></div>
+                </div>
+            </div>
             <div style="
                 position: relative; padding: 18px; padding-top: 45px;
             ">
@@ -257,22 +266,26 @@
             startMergeDownloadFlow(siteConfig);
         };
         panel.querySelector('#btn-stop').onclick = () => stopDownloadFlow(siteConfig);
+        let lastResetIndex = currentIndex;
         panel.querySelector('#btn-reset').onclick = () => {
             const input = panel.querySelector('#reset-index-input');
             const newIndex = parseInt(input.value) || 1;
-            if (newIndex < 1) {
-                input.value = 1;
-                resetIndex(1);
-            } else {
-                resetIndex(newIndex);
+            const validIndex = newIndex < 1 ? 1 : newIndex;
+            if (validIndex !== lastResetIndex) {
+                lastResetIndex = validIndex;
+                input.value = validIndex;
+                resetIndex(validIndex);
             }
         };
         panel.querySelector('#reset-index-input').onchange = () => {
             const input = panel.querySelector('#reset-index-input');
             let val = parseInt(input.value) || 1;
             if (val < 1) val = 1;
-            input.value = val;
-            resetIndex(val);
+            if (val !== lastResetIndex) {
+                lastResetIndex = val;
+                input.value = val;
+                resetIndex(val);
+            }
         };
 
         document.getElementById('current-index').textContent = currentIndex;
