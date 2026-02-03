@@ -149,6 +149,11 @@
                         background: linear-gradient(120deg, #3b82f6, #2563eb);
                         color:white; font-weight:bold; cursor:pointer; box-shadow: 0 2px 8px rgba(59,130,246,0.4);
                     ">▶️ 开始下载</button>
+                    <button id="btn-merge" style="
+                        flex:1; padding:10px; border-radius:10px; border:none;
+                        background: linear-gradient(120deg, #10b981, #059669);
+                        color:white; font-weight:bold; cursor:pointer;
+                    ">📦 合并下载</button>
                     <button id="btn-stop" style="
                         flex:1; padding:10px; border-radius:10px; border:none;
                         background: linear-gradient(120deg, #ef4444, #dc2626);
@@ -186,6 +191,11 @@
             GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
             startDownloadFlow(siteConfig);
         };
+        panel.querySelector('#btn-merge').onclick = () => {
+            GM_setValue(getStateKey(siteConfig.siteKey, 'active'), true);
+            GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
+            startMergeDownloadFlow(siteConfig);
+        };
         panel.querySelector('#btn-stop').onclick = () => stopDownloadFlow(siteConfig);
         panel.querySelector('#btn-reset').onclick = () => {
             const input = panel.querySelector('#reset-index-input');
@@ -217,6 +227,7 @@
         const currentIndexEl = document.getElementById('current-index');
         const inputIndexEl = document.getElementById('reset-index-input');
         const btnStart = document.getElementById('btn-start');
+        const btnMerge = document.getElementById('btn-merge');
         const btnStop = document.getElementById('btn-stop');
 
         if (!dot || !statusText) return;
@@ -233,6 +244,7 @@
                 statusText.style.color = '#64748b';
                 btnStart.style.display = 'block';
                 btnStart.textContent = '▶️ 开始下载';
+                btnMerge.style.display = 'block';
                 btnStop.style.display = 'none';
                 break;
             case 'running':
@@ -244,12 +256,31 @@
                 btnStop.disabled = false;
                 btnStop.textContent = '⏹️ 停止';
                 break;
+            case 'merging':
+                dot.style.background = '#f59e0b';
+                statusText.textContent = '📦 收集中...';
+                statusText.style.color = '#fbbf24';
+                btnStart.style.display = 'none';
+                btnMerge.style.display = 'none';
+                btnStop.style.display = 'block';
+                btnStop.disabled = false;
+                btnStop.textContent = '⏹️ 停止';
+                break;
+            case 'saving':
+                dot.style.background = '#3b82f6';
+                statusText.textContent = '💾 保存中...';
+                statusText.style.color = '#60a5fa';
+                btnStart.style.display = 'none';
+                btnMerge.style.display = 'none';
+                btnStop.style.display = 'none';
+                break;
             case 'paused':
                 dot.style.background = '#fbbf24';
                 statusText.textContent = '⏸️ 已暂停';
                 statusText.style.color = '#fbbf24';
                 btnStart.style.display = 'block';
                 btnStart.textContent = '▶️ 继续';
+                btnMerge.style.display = 'block';
                 btnStop.style.display = 'none';
                 break;
             case 'stopping':
@@ -267,6 +298,7 @@
                 statusText.style.color = '#a78bfa';
                 btnStart.style.display = 'block';
                 btnStart.textContent = '🔄 重新开始';
+                btnMerge.style.display = 'block';
                 btnStop.style.display = 'none';
                 break;
         }
@@ -359,13 +391,126 @@
     // ================== 🚦 流程控制 ==================
     let isStopping = false;
     let currentTimeout = null;
+    let mergeDownloadMode = false;
+    let mergeDownloadChapters = [];
+    let mergeDownloadCurrentTitle = '';
 
-    function startDownloadFlow(siteConfig) {
+    function sanitizeFilename(str) {
+        return (str || 'chapter')
+            .replace(/[/\\?%*:|"<>]/g, '_')
+            .replace(/\s+/g, '_')
+            .replace(/[#]/g, '_')
+            .trim()
+            .slice(0, 60);
+    }
+
+    async function saveMergedNovel() {
+        if (mergeDownloadChapters.length === 0) return;
+
+        const novelName = sanitizeFilename(mergeDownloadCurrentTitle || 'merged_novel');
+        const filename = `merged_${novelName}.txt`;
+        const content = mergeDownloadChapters
+            .map((chap, idx) => `【${chap.title}】\n${chap.content}`)
+            .join('\n\n');
+
+        return new Promise((resolve, reject) => {
+            GM_download({
+                url: URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' })),
+                name: filename,
+                onload: () => {
+                    console.log(`[${scriptInfo.name}] ✅ 合并下载完成: ${filename} (${mergeDownloadChapters.length}章)`);
+                    GM_notification({ text: `✅ ${filename}`, timeout: 2000 });
+                    resolve();
+                },
+                onerror: reject
+            });
+        });
+    }
+
+    function startMergeDownloadFlow(siteConfig) {
         if (isStopping) return;
+        mergeDownloadMode = true;
+        mergeDownloadChapters = [];
         GM_setValue(getStateKey(siteConfig.siteKey, 'active'), true);
         GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
-        updatePanelState('running');
-        processChapter(siteConfig);
+        updatePanelState('merging');
+        processMergeChapter(siteConfig);
+    }
+
+    async function processMergeChapter(siteConfig) {
+        if (isStopping) {
+            mergeDownloadMode = false;
+            return;
+        }
+
+        try {
+            const currentIndex = getCurrentIndex(siteConfig.siteKey);
+            updatePanelState('merging', '', currentIndex);
+
+            const titleEl = document.querySelector(siteConfig.TITLE_SELECTOR);
+            const rawTitle = (titleEl?.innerText || 'unnamed').trim();
+            mergeDownloadCurrentTitle = rawTitle;
+            updatePanelState('merging', rawTitle, currentIndex);
+
+            const paragraphs = document.querySelectorAll(siteConfig.CONTENT_SELECTOR);
+            if (paragraphs.length === 0) throw new Error('无法找到章节内容');
+
+            const content = Array.from(paragraphs)
+                .map(p => p.innerText.trim())
+                .filter(t => t)
+                .join('\n\n');
+
+            mergeDownloadChapters.push({ index: currentIndex, title: rawTitle, content });
+            console.log(`[${scriptInfo.name}] 📥 已收集: ${rawTitle} (${mergeDownloadChapters.length}章)`);
+
+            const nextUrl = findNextChapterUrl(siteConfig);
+
+            if (isStopping) {
+                updatePanelState('idle');
+                mergeDownloadMode = false;
+                return;
+            }
+
+            incrementIndex(siteConfig.siteKey);
+
+            if (!nextUrl) {
+                updatePanelState('saving', rawTitle);
+                await saveMergedNovel();
+                GM_deleteValue(getStateKey(siteConfig.siteKey, 'active'));
+                updatePanelState('complete', rawTitle);
+                GM_notification({ text: '🎉 合并下载完成!', timeout: 4000 });
+                mergeDownloadMode = false;
+                mergeDownloadChapters = [];
+                console.log(`[${scriptInfo.name}] 🎉 合并下载完成，共${mergeDownloadChapters.length}章`);
+                return;
+            }
+
+            const delay = siteConfig.DELAY_MIN + Math.random() * (siteConfig.DELAY_MAX - siteConfig.DELAY_MIN);
+            console.log(`[${scriptInfo.name}] ➡️ ${Math.round(delay)}ms 后跳转到下一章`);
+
+            let countdown = Math.floor(delay / 1000);
+            const interval = setInterval(() => {
+                if (isStopping || GM_getValue(getStateKey(siteConfig.siteKey, 'paused'))) {
+                    clearInterval(interval);
+                    return;
+                }
+                document.getElementById('status-text').textContent = `📦 收集中 (${countdown}s) ${mergeDownloadChapters.length}章`;
+                countdown--;
+            }, 1000);
+
+            currentTimeout = setTimeout(() => {
+                clearInterval(interval);
+                if (!isStopping && !GM_getValue(getStateKey(siteConfig.siteKey, 'paused'))) {
+                    processMergeChapter(siteConfig);
+                }
+            }, delay);
+
+        } catch (error) {
+            console.error(`[${scriptInfo.name}] ❌ 发生错误:`, error);
+            GM_notification({ text: `❌ 错误: ${error.message}`, timeout: 3000 });
+            updatePanelState('paused');
+            GM_setValue(getStateKey(siteConfig.siteKey, 'paused'), true);
+        }
     }
 
     function stopDownloadFlow(siteConfig) {
@@ -375,9 +520,18 @@
         GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
 
         if (currentTimeout) clearTimeout(currentTimeout);
-        setTimeout(() => {
-            if (isStopping) updatePanelState('idle');
-        }, 2000);
+
+        if (mergeDownloadMode && mergeDownloadChapters.length > 0) {
+            saveMergedNovel().then(() => {
+                mergeDownloadMode = false;
+                mergeDownloadChapters = [];
+                setTimeout(() => updatePanelState('idle'), 1000);
+            });
+        } else {
+            setTimeout(() => {
+                if (isStopping) updatePanelState('idle');
+            }, 2000);
+        }
     }
 
     async function processChapter(siteConfig) {
