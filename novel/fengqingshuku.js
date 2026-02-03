@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         📚 小说章节下载器（带智能序号）
+// @name         📚 小说章节下载器
 // @namespace    https://github.com/yourname/novel-downloader
 // @version      1.0.0
-// @description  点击一次「开始下载」→ 自动生成 1##标题.txt 格式文件 → 自动跳转下一章 → 序号连续递增（方便后续合并）
+// @description  点击「开始下载」自动保存章节 → 按序号生成文件 → 自动翻页 → 支持多网站
 // @author       AI Assistant
 // @match        *://*/read-*.html
 // @grant        GM_download
@@ -18,25 +18,79 @@
 (function() {
     'use strict';
 
-    // ================== ⚙️ 配置区 ==================
-    const CONFIG = {
-        TITLE_SELECTOR: '.chapter_title',
-        CONTENT_SELECTOR: '.chapter_con p',
-        NAV_SELECTOR: '.prev_next',
-        NEXT_KEYWORD: '下一章',
-        DELAY_MIN: 2500,
-        DELAY_MAX: 4000,
-        MAX_RETRY: 3,
-        SHOW_TOAST: true
+    // ================== ⚙️ 网站配置区 ==================
+    const SITE_CONFIGS = {
+        'site-default': {
+            name: '通用模板',
+            matchPatterns: [],
+            TITLE_SELECTOR: '.chapter_title',
+            CONTENT_SELECTOR: '.chapter_con p',
+            NAV_SELECTOR: '.prev_next',
+            NEXT_KEYWORD: '下一章',
+            DELAY_MIN: 2500,
+            DELAY_MAX: 4000,
+            MAX_RETRY: 3,
+            SHOW_TOAST: true
+        },
+        'site-fengqingshuku': {
+            name: '风情书库',
+            matchPatterns: ['*://*/read-*.html'],
+            TITLE_SELECTOR: '.chapter_title',
+            CONTENT_SELECTOR: '.chapter_con p',
+            NAV_SELECTOR: '.prev_next',
+            NEXT_KEYWORD: '下一章',
+            DELAY_MIN: 2500,
+            DELAY_MAX: 4000,
+            MAX_RETRY: 3,
+            SHOW_TOAST: true
+        }
     };
 
-    // 持久化存储键名
-    const STATE_KEY = 'novel_downloader_active';
-    const PAUSE_KEY = 'novel_downloader_paused';
-    const INDEX_KEY = 'novel_downloader_chapter_index'; // 核心：章节序号存储
+    // ================== 🛠️ 工具函数 ==================
+    function matchUrlPattern(pattern, url) {
+        if (!pattern) return false;
+        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+        return regex.test(url);
+    }
 
-    // ================== 🎨 智能控制面板（新增序号显示）==================
-    function createControlPanel(currentIndex = 1, autoStart = false) {
+    function getCurrentSiteConfig() {
+        const url = window.location.href;
+        for (const [key, config] of Object.entries(SITE_CONFIGS)) {
+            if (key === 'site-default') continue;
+            if (config.matchPatterns && config.matchPatterns.length > 0) {
+                for (const pattern of config.matchPatterns) {
+                    if (matchUrlPattern(pattern, url)) {
+                        return { ...SITE_CONFIGS['site-default'], ...config, siteKey: key };
+                    }
+                }
+            }
+        }
+        return { ...SITE_CONFIGS['site-default'], siteKey: 'site-default' };
+    }
+
+    // ================== 🔑 状态存储 ==================
+    function getStateKey(siteKey, key) {
+        return `novel_downloader_${siteKey}_${key}`;
+    }
+
+    function getCurrentIndex(siteKey) {
+        const indexKey = getStateKey(siteKey, 'chapter_index');
+        return GM_getValue(indexKey, 1);
+    }
+
+    function setCurrentIndex(siteKey, index) {
+        const indexKey = getStateKey(siteKey, 'chapter_index');
+        GM_setValue(indexKey, index);
+    }
+
+    function incrementIndex(siteKey) {
+        const newIndex = getCurrentIndex(siteKey) + 1;
+        setCurrentIndex(siteKey, newIndex);
+        return newIndex;
+    }
+
+    // ================== 🎨 控制面板 ==================
+    function createControlPanel(currentIndex, siteConfig) {
         if (document.getElementById('novel-control-panel')) return;
 
         const panel = document.createElement('div');
@@ -60,6 +114,10 @@
                     </strong>
                 </div>
 
+                <div style="font-size:12px; color:#60a5fa; margin-bottom: 6px;">
+                    📍 ${siteConfig.name}
+                </div>
+
                 <div style="font-size:13px; color:#94a3b8; margin: 6px 0; line-height: 1.5;">
                     <div>📌 序号: <span id="current-index" style="color:#f472b6; font-weight:bold; font-size:14px">${currentIndex}</span></div>
                     <div>章节: <span id="current-title" style="color:#cbd5e1; font-weight:500">-</span></div>
@@ -71,12 +129,12 @@
                         flex:1; padding:10px; border-radius:10px; border:none;
                         background: linear-gradient(120deg, #3b82f6, #2563eb);
                         color:white; font-weight:bold; cursor:pointer; box-shadow: 0 2px 8px rgba(59,130,246,0.4);
-                                        ">▶️ 开始下载</button>
+                    ">▶️ 开始下载</button>
                     <button id="btn-stop" style="
                         flex:1; padding:10px; border-radius:10px; border:none;
                         background: linear-gradient(120deg, #ef4444, #dc2626);
                         color:white; font-weight:bold; cursor:pointer; display:none;
-                                        ">⏹️ 停止</button>
+                    ">⏹️ 停止</button>
                 </div>
 
                 <div style="
@@ -105,16 +163,13 @@
         `;
         document.body.appendChild(panel);
 
-        // 绑定事件
         panel.querySelector('#btn-start').onclick = () => {
-            GM_setValue(STATE_KEY, true);
-            GM_deleteValue(PAUSE_KEY);
-            // 重置序号逻辑移至 resetIndex 函数，此处仅启动流程
-            startDownloadFlow();
+            GM_setValue(getStateKey(siteConfig.siteKey, 'active'), true);
+            GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
+            startDownloadFlow(siteConfig);
         };
-        panel.querySelector('#btn-stop').onclick = stopDownloadFlow;
+        panel.querySelector('#btn-stop').onclick = () => stopDownloadFlow(siteConfig);
 
-        // 初始化序号显示
         document.getElementById('current-index').textContent = currentIndex;
 
         return panel;
@@ -178,31 +233,27 @@
         }
     }
 
-    // ================== 📥 核心功能 (文件名带序号) ==================
+    // ================== 📥 核心功能 ==================
     function sanitizeFilename(str) {
         return (str || 'chapter')
             .replace(/[/\\?%*:|"<>]/g, '_')
             .replace(/\s+/g, '_')
-            .replace(/[#]/g, '_') // 标题内的 # 移除 (防止文件名冲突)
+            .replace(/[#]/g, '_')
             .trim()
-            .slice(0, 60); // 标题长度限制
+            .slice(0, 60);
     }
 
-    // 文件名生成: "3##05_朋友见面.txt"
     function generateFilename(index, rawTitle) {
         const cleanTitle = sanitizeFilename(rawTitle);
         return `${index}##${cleanTitle}.txt`;
     }
 
-    async function downloadCurrentChapter(chapterIndex) {
-        const titleEl = document.querySelector(CONFIG.TITLE_SELECTOR);
+    async function downloadCurrentChapter(chapterIndex, siteConfig) {
+        const titleEl = document.querySelector(siteConfig.TITLE_SELECTOR);
         const rawTitle = (titleEl?.innerText || 'unnamed').trim();
-        const safeTitle = sanitizeFilename(rawTitle);
-
-        // 文件名生成 (核心!)
         const filename = generateFilename(chapterIndex, rawTitle);
 
-        const paragraphs = document.querySelectorAll(CONFIG.CONTENT_SELECTOR);
+        const paragraphs = document.querySelectorAll(siteConfig.CONTENT_SELECTOR);
         if (paragraphs.length === 0) throw new Error('无法找到章节内容');
 
         const content = Array.from(paragraphs)
@@ -210,8 +261,7 @@
             .filter(t => t)
             .join('\n\n');
 
-        // 下载执行
-        for (let i = 0; i <= CONFIG.MAX_RETRY; i++) {
+        for (let i = 0; i <= siteConfig.MAX_RETRY; i++) {
             try {
                 await new Promise((resolve, reject) => {
                     GM_download({
@@ -221,7 +271,7 @@
                         onerror: reject
                     });
                 });
-                if (CONFIG.SHOW_TOAST) {
+                if (siteConfig.SHOW_TOAST) {
                     GM_notification({
                         text: `✅ ${filename}`,
                         timeout: 800,
@@ -229,21 +279,21 @@
                     });
                 }
                 console.log(`[NovelDownloader] ✅ 保存完成: ${filename}`);
-                return { success: true, nextUrl: findNextChapterUrl(), title: rawTitle };
+                return { success: true, nextUrl: findNextChapterUrl(siteConfig), title: rawTitle };
             } catch (e) {
                 console.warn(`[NovelDownloader] ⚠️ 下载失败 (尝试 ${i+1}):`, e.message);
-                if (i === CONFIG.MAX_RETRY) throw e;
+                if (i === siteConfig.MAX_RETRY) throw e;
                 await new Promise(r => setTimeout(r, 1000 * (i + 1)));
             }
         }
     }
 
-    function findNextChapterUrl() {
-        const nav = document.querySelector(CONFIG.NAV_SELECTOR);
+    function findNextChapterUrl(siteConfig) {
+        const nav = document.querySelector(siteConfig.NAV_SELECTOR);
         if (!nav) return null;
 
         for (const a of nav.querySelectorAll('a')) {
-            if (a.textContent.includes(CONFIG.NEXT_KEYWORD) && a.href && !a.href.includes('#')) {
+            if (a.textContent.includes(siteConfig.NEXT_KEYWORD) && a.href && !a.href.includes('#')) {
                 return a.href;
             }
         }
@@ -254,24 +304,14 @@
         return links.length > 0 ? links[links.length - 1].href : null;
     }
 
-    // ================== 🔢 序号管理 (核心) ==================
-    function getCurrentIndex() {
-        return GM_getValue(INDEX_KEY, 1); // 默认值 1
-    }
-
-    function incrementIndex() {
-        const newIndex = getCurrentIndex() + 1;
-        GM_setValue(INDEX_KEY, newIndex);
-        return newIndex;
-    }
-
-    // 控制台可执行的序号重置函数
+    // ================== 🔢 控制台函数 ==================
     window.resetIndex = (start = 1) => {
+        const siteConfig = getCurrentSiteConfig();
         if (typeof start !== 'number' || start < 1) start = 1;
-        GM_setValue(INDEX_KEY, start);
+        setCurrentIndex(siteConfig.siteKey, start);
         const idxEl = document.getElementById('current-index');
         if (idxEl) idxEl.textContent = start;
-        console.log(`%c[NovelDownloader] ✅ 序号已重置为 ${start}`, 'color: #10b981; font-weight:bold');
+        console.log(`%c[NovelDownloader] ✅ 序号已重置为 ${start} (${siteConfig.name})`, 'color: #10b981; font-weight:bold');
         GM_notification(`序号已重置为 ${start}`);
     };
 
@@ -279,19 +319,19 @@
     let isStopping = false;
     let currentTimeout = null;
 
-    function startDownloadFlow() {
+    function startDownloadFlow(siteConfig) {
         if (isStopping) return;
-        GM_setValue(STATE_KEY, true);
-        GM_deleteValue(PAUSE_KEY);
+        GM_setValue(getStateKey(siteConfig.siteKey, 'active'), true);
+        GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
         updatePanelState('running');
-        processChapter();
+        processChapter(siteConfig);
     }
 
-    function stopDownloadFlow() {
+    function stopDownloadFlow(siteConfig) {
         isStopping = true;
         updatePanelState('stopping');
-        GM_deleteValue(STATE_KEY);
-        GM_deleteValue(PAUSE_KEY);
+        GM_deleteValue(getStateKey(siteConfig.siteKey, 'active'));
+        GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
 
         if (currentTimeout) clearTimeout(currentTimeout);
         setTimeout(() => {
@@ -299,47 +339,40 @@
         }, 2000);
     }
 
-        async function processChapter() {
-            if (isStopping) return;
+    async function processChapter(siteConfig) {
+        if (isStopping) return;
 
-            try {
-                // 获取当前序号 (用于本章节)
-                const currentIndex = getCurrentIndex();
-                updatePanelState('running', '', currentIndex);
+        try {
+            const currentIndex = getCurrentIndex(siteConfig.siteKey);
+            updatePanelState('running', '', currentIndex);
 
-                // 获取标题
-                const titleEl = document.querySelector(CONFIG.TITLE_SELECTOR);
-                const rawTitle = (titleEl?.innerText || 'unnamed').trim();
-                updatePanelState('running', rawTitle, currentIndex);
+            const titleEl = document.querySelector(siteConfig.TITLE_SELECTOR);
+            const rawTitle = (titleEl?.innerText || 'unnamed').trim();
+            updatePanelState('running', rawTitle, currentIndex);
 
-                // 使用当前序号下载
-            const { nextUrl } = await downloadCurrentChapter(currentIndex);
+            const { nextUrl } = await downloadCurrentChapter(currentIndex, siteConfig);
 
             if (isStopping) {
                 updatePanelState('idle');
                 return;
             }
 
-                // 序号增加 (为下一章做准备)
-                incrementIndex();
+            incrementIndex(siteConfig.siteKey);
 
-                // 最后一章处理
-                if (!nextUrl) {
-                    GM_deleteValue(STATE_KEY);
-                    updatePanelState('complete', rawTitle);
-                    GM_notification({ text: '🎉 全部下载完成!', timeout: 4000 });
-                    console.log('[NovelDownloader] 🎉 到达最后一章');
-                    return;
-                }
+            if (!nextUrl) {
+                GM_deleteValue(getStateKey(siteConfig.siteKey, 'active'));
+                updatePanelState('complete', rawTitle);
+                GM_notification({ text: '🎉 全部下载完成!', timeout: 4000 });
+                console.log('[NovelDownloader] 🎉 到达最后一章');
+                return;
+            }
 
-                // 随机延迟
-                const delay = CONFIG.DELAY_MIN + Math.random() * (CONFIG.DELAY_MAX - CONFIG.DELAY_MIN);
-                console.log(`[NovelDownloader] ➡️ ${Math.round(delay)}ms 后跳转到下一章: ${nextUrl}`);
+            const delay = siteConfig.DELAY_MIN + Math.random() * (siteConfig.DELAY_MAX - siteConfig.DELAY_MIN);
+            console.log(`[NovelDownloader] ➡️ ${Math.round(delay)}ms 后跳转到下一章: ${nextUrl}`);
 
-                // 倒计时更新
             let countdown = Math.floor(delay / 1000);
             const interval = setInterval(() => {
-                if (isStopping || GM_getValue(PAUSE_KEY)) {
+                if (isStopping || GM_getValue(getStateKey(siteConfig.siteKey, 'paused'))) {
                     clearInterval(interval);
                     return;
                 }
@@ -347,10 +380,9 @@
                 countdown--;
             }, 1000);
 
-            // 跳转执行
             currentTimeout = setTimeout(() => {
                 clearInterval(interval);
-                if (!isStopping && !GM_getValue(PAUSE_KEY)) {
+                if (!isStopping && !GM_getValue(getStateKey(siteConfig.siteKey, 'paused'))) {
                     console.log(`[NovelDownloader] 跳转: ${nextUrl}`);
                     window.location.href = nextUrl;
                 }
@@ -360,54 +392,60 @@
             console.error('[NovelDownloader] ❌ 发生错误:', error);
             GM_notification({ text: `❌ 错误: ${error.message}`, timeout: 3000 });
             updatePanelState('paused');
-            GM_setValue(PAUSE_KEY, true);
+            GM_setValue(getStateKey(siteConfig.siteKey, 'paused'), true);
         }
     }
 
     // ================== 🌐 控制台控制函数 ==================
     window.startDownload = () => document.getElementById('btn-start')?.click();
-    window.stopDownload = stopDownloadFlow;
+    window.stopDownload = () => {
+        const siteConfig = getCurrentSiteConfig();
+        stopDownloadFlow(siteConfig);
+    };
     window.pauseDownload = () => {
-        GM_setValue(PAUSE_KEY, true);
+        const siteConfig = getCurrentSiteConfig();
+        GM_setValue(getStateKey(siteConfig.siteKey, 'paused'), true);
         isStopping = true;
         updatePanelState('paused');
         console.log('[NovelDownloader] ⏸️ 已暂停');
     };
     window.resumeDownload = () => {
-        GM_deleteValue(PAUSE_KEY);
-        if (GM_getValue(STATE_KEY)) {
+        const siteConfig = getCurrentSiteConfig();
+        GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
+        if (GM_getValue(getStateKey(siteConfig.siteKey, 'active'))) {
             isStopping = false;
-            startDownloadFlow();
+            startDownloadFlow(siteConfig);
             console.log('[NovelDownloader] ▶️ 已恢复');
         }
     };
-    // resetIndex 函数已在上面定义
 
-    // ================== 🚀 初始化 (核心: 序号状态管理) ==================
+    // ================== 🚀 初始化 ==================
     function init() {
-        // 状态确认
-        const isActive = GM_getValue(STATE_KEY, false);
-        const isPaused = GM_getValue(PAUSE_KEY, false);
-        const currentIndex = getCurrentIndex(); // 获取当前序号
+        const siteConfig = getCurrentSiteConfig();
+        const currentIndex = getCurrentIndex(siteConfig.siteKey);
+        const stateKey = getStateKey(siteConfig.siteKey, 'active');
+        const pauseKey = getStateKey(siteConfig.siteKey, 'paused');
 
-        createControlPanel(currentIndex);
+        createControlPanel(currentIndex, siteConfig);
 
-        // 自动启动逻辑
+        const isActive = GM_getValue(stateKey, false);
+        const isPaused = GM_getValue(pauseKey, false);
+
         if (isActive && !isPaused) {
-            console.log(`[NovelDownloader] 💡 检测到连续下载模式 (当前序号: ${currentIndex}), 300ms 后开始...`);
+            console.log(`[NovelDownloader] 💡 检测到连续下载模式 (${siteConfig.name}, 序号: ${currentIndex}), 300ms 后开始...`);
             updatePanelState('running', '准备中...', currentIndex);
 
             setTimeout(() => {
-                if (!isStopping && GM_getValue(STATE_KEY)) {
-                    startDownloadFlow();
+                if (!isStopping && GM_getValue(stateKey)) {
+                    startDownloadFlow(siteConfig);
                 }
             }, 300);
         } else if (isPaused) {
             updatePanelState('paused', '', currentIndex);
-            console.log(`[NovelDownloader] ⏸️ 暂停状态 (当前序号: ${currentIndex})`);
+            console.log(`[NovelDownloader] ⏸️ 暂停状态 (${siteConfig.name}, 序号: ${currentIndex})`);
         } else {
             updatePanelState('idle', '', currentIndex);
-            console.log('%c📚 小说下载器准备就绪', 'color: #3b82f6; font-weight: bold; font-size: 14px;');
+            console.log(`%c📚 小说下载器准备就绪 (${siteConfig.name})`, 'color: #3b82f6; font-weight: bold; font-size: 14px;');
             console.log('%cℹ️  点击右下角 [开始下载] 按钮', 'color: #60a5fa;');
             console.log('%c🔧 高级: 在控制台执行 resetIndex(1) 重置序号', 'color: #f472b6;');
         }
