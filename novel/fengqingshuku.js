@@ -37,6 +37,7 @@
             STRICT_NEXT_MODE: true,
             NOVEL_TITLE_SELECTOR: '',
             NOVEL_AUTHOR_SELECTOR: '',
+            AUTHOR_EXTRACT_REGEX: '',
             DELAY_MIN: 2500,
             DELAY_MAX: 4000,
             MAX_RETRY: 3,
@@ -52,8 +53,9 @@
             NEXT_KEYWORDS: ['下一章'],
             PREV_KEYWORDS: ['上一章', '目录', '返回', '首页'],
             STRICT_NEXT_MODE: true,
-            NOVEL_TITLE_SELECTOR: '.page_head a',
+            NOVEL_TITLE_SELECTOR: '.page_head a:nth-child(3)',
             NOVEL_AUTHOR_SELECTOR: '.chapter_info_mid',
+            AUTHOR_EXTRACT_REGEX: '作者[：:]\\s*([^更新\\s]+)',
             DELAY_MIN: 1500,
             DELAY_MAX: 2000,
             MAX_RETRY: 3,
@@ -71,6 +73,7 @@
             STRICT_NEXT_MODE: true,
             NOVEL_TITLE_SELECTOR: '',
             NOVEL_AUTHOR_SELECTOR: '',
+            AUTHOR_EXTRACT_REGEX: '',
             DELAY_MIN: 2500,
             DELAY_MAX: 4000,
             MAX_RETRY: 3,
@@ -142,8 +145,12 @@
         let author = '';
         if (authorEl) {
             const text = authorEl.innerText || '';
-            const match = text.match(/作者[：:]\s*([^更新\s]+)/);
-            author = match ? match[1].trim() : '';
+            if (siteConfig.AUTHOR_EXTRACT_REGEX) {
+                const match = text.match(new RegExp(siteConfig.AUTHOR_EXTRACT_REGEX));
+                author = match ? match[1].trim() : '';
+            } else {
+                author = text.trim();
+            }
         }
 
         return { title, author };
