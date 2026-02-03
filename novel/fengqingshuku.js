@@ -265,6 +265,7 @@
                 statusText.textContent = '🚀 下载中...';
                 statusText.style.color = '#34d399';
                 btnStart.style.display = 'none';
+                btnMerge.style.display = 'none';
                 btnStop.style.display = 'block';
                 btnStop.disabled = false;
                 btnStop.textContent = '⏹️ 停止';
@@ -301,6 +302,7 @@
                 statusText.textContent = '🛑 停止中...';
                 statusText.style.color = '#f87171';
                 btnStart.style.display = 'none';
+                btnMerge.style.display = 'none';
                 btnStop.style.display = 'block';
                 btnStop.disabled = true;
                 btnStop.textContent = '⏹️ 停止中...';
@@ -568,6 +570,7 @@
 
     function stopDownloadFlow(siteConfig) {
         isStopping = true;
+        mergeDownloadMode = false;
         updatePanelState('stopping');
         GM_deleteValue(getStateKey(siteConfig.siteKey, 'active'));
         GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
@@ -576,14 +579,18 @@
         if (currentTimeout) clearTimeout(currentTimeout);
 
         const chapters = getMergeChapters();
-        if (mergeDownloadMode && chapters.length > 0) {
+        if (chapters.length > 0) {
             saveMergedNovel().then(() => {
-                mergeDownloadMode = false;
-                setTimeout(() => updatePanelState('idle'), 1000);
+                clearMergeChapters();
+                setTimeout(() => {
+                    isStopping = false;
+                    updatePanelState('idle');
+                }, 1000);
             });
         } else {
             setTimeout(() => {
-                if (isStopping) updatePanelState('idle');
+                isStopping = false;
+                updatePanelState('idle');
             }, 2000);
         }
     }
