@@ -120,6 +120,17 @@
 
                 <div style="font-size:13px; color:#94a3b8; margin: 6px 0; line-height: 1.5;">
                     <div>📌 序号: <span id="current-index" style="color:#f472b6; font-weight:bold; font-size:14px">${currentIndex}</span></div>
+                    <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                        <input type="number" id="reset-index-input" value="${currentIndex}" min="1" style="
+                            width: 70px; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(96,165,250,0.3);
+                            background: rgba(30,30,40,0.8); color: #f472b6; font-weight:bold; font-size:13px;
+                        ">
+                        <button id="btn-reset" style="
+                            padding: 4px 10px; border-radius: 6px; border: none;
+                            background: linear-gradient(120deg, #8b5cf6, #7c3aed);
+                            color: white; font-weight:bold; font-size:12px; cursor: pointer;
+                        ">重置</button>
+                    </div>
                     <div>章节: <span id="current-title" style="color:#cbd5e1; font-weight:500">-</span></div>
                     <div>状态: <span id="status-text" style="color:#64748b">⏳ 等待中</span></div>
                 </div>
@@ -169,6 +180,23 @@
             startDownloadFlow(siteConfig);
         };
         panel.querySelector('#btn-stop').onclick = () => stopDownloadFlow(siteConfig);
+        panel.querySelector('#btn-reset').onclick = () => {
+            const input = panel.querySelector('#reset-index-input');
+            const newIndex = parseInt(input.value) || 1;
+            if (newIndex < 1) {
+                input.value = 1;
+                resetIndex(1);
+            } else {
+                resetIndex(newIndex);
+            }
+        };
+        panel.querySelector('#reset-index-input').onchange = () => {
+            const input = panel.querySelector('#reset-index-input');
+            let val = parseInt(input.value) || 1;
+            if (val < 1) val = 1;
+            input.value = val;
+            resetIndex(val);
+        };
 
         document.getElementById('current-index').textContent = currentIndex;
 
@@ -180,12 +208,16 @@
         const statusText = document.getElementById('status-text');
         const currentTitle = document.getElementById('current-title');
         const currentIndexEl = document.getElementById('current-index');
+        const inputIndexEl = document.getElementById('reset-index-input');
         const btnStart = document.getElementById('btn-start');
         const btnStop = document.getElementById('btn-stop');
 
         if (!dot || !statusText) return;
         if (title) currentTitle.textContent = title.slice(0, 18) + (title.length > 18 ? '...' : '');
-        if (index !== null && currentIndexEl) currentIndexEl.textContent = index;
+        if (index !== null) {
+            if (currentIndexEl) currentIndexEl.textContent = index;
+            if (inputIndexEl) inputIndexEl.value = index;
+        }
 
         switch(state) {
             case 'idle':
@@ -310,7 +342,9 @@
         if (typeof start !== 'number' || start < 1) start = 1;
         setCurrentIndex(siteConfig.siteKey, start);
         const idxEl = document.getElementById('current-index');
+        const inputEl = document.getElementById('reset-index-input');
         if (idxEl) idxEl.textContent = start;
+        if (inputEl) inputEl.value = start;
         console.log(`%c[NovelDownloader] ✅ 序号已重置为 ${start} (${siteConfig.name})`, 'color: #10b981; font-weight:bold');
         GM_notification(`序号已重置为 ${start}`);
     };
