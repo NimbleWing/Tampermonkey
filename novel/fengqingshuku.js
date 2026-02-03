@@ -196,6 +196,23 @@
                 ">
                     💡 文件名格式: <span style="color:#f472b6; font-weight:500">1##标题.txt</span><br>
                 </div>
+
+                <div style="
+                    margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1);
+                    font-size:11px; color:#64748b; display: flex; align-items: center; justify-content: center; gap: 6px;
+                ">
+                    <span>⏱️ 初始化延迟:</span>
+                    <input type="number" id="init-delay-input" value="500" min="0" max="10000" step="100" style="
+                        width: 60px; padding: 3px 6px; border-radius: 4px; border: 1px solid rgba(96,165,250,0.3);
+                        background: rgba(30,30,40,0.8); color: #60a5fa; font-size:11px; text-align: center;
+                    ">
+                    <span>ms</span>
+                    <button id="btn-apply-delay" style="
+                        padding: 3px 8px; border-radius: 4px; border: none;
+                        background: linear-gradient(120deg, #6366f1, #4f46e5);
+                        color: white; font-size:10px; cursor: pointer;
+                    ">应用</button>
+                </div>
             </div>
             <style>
                 @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
@@ -286,6 +303,17 @@
                 input.value = val;
                 resetIndex(val);
             }
+        };
+
+        const savedDelay = GM_getValue('custom_init_delay', 500);
+        const delayInput = panel.querySelector('#init-delay-input');
+        delayInput.value = savedDelay;
+        panel.querySelector('#btn-apply-delay').onclick = () => {
+            const delay = parseInt(delayInput.value) || 500;
+            const validDelay = Math.max(0, Math.min(10000, delay));
+            delayInput.value = validDelay;
+            GM_setValue('custom_init_delay', validDelay);
+            GM_notification(`初始化延迟已设置为 ${validDelay}ms`);
         };
 
         document.getElementById('current-index').textContent = currentIndex;
@@ -753,23 +781,21 @@
         if (isMergeMode && existingChapters.length > 0) {
             mergeDownloadMode = true;
             updatePanelState('merging', '', existingChapters.length);
-            console.log(`[${scriptInfo.name}] 💡 检测到合并下载任务，已收集 ${existingChapters.length} 章，300ms 后继续...`);
-
+            console.log(`[${scriptInfo.name}] 💡 检测到合并下载任务，已收集 ${existingChapters.length} 章，${initDelay}ms 后继续...`);
             setTimeout(() => {
                 if (!isStopping) {
                     GM_setValue(mergeKey, true);
                     processMergeChapter(siteConfig);
                 }
-            }, 300);
+            }, initDelay);
         } else if (isActive && !isPaused) {
-            console.log(`[${scriptInfo.name}] 💡 检测到连续下载模式 (${siteConfig.name}, 序号: ${currentIndex}), 300ms 后开始...`);
+            console.log(`[${scriptInfo.name}] 💡 检测到连续下载模式 (${siteConfig.name}, 序号: ${currentIndex}), ${initDelay}ms 后开始...`);
             updatePanelState('running', '准备中...', currentIndex);
-
             setTimeout(() => {
                 if (!isStopping && GM_getValue(stateKey)) {
                     startDownloadFlow(siteConfig);
                 }
-            }, 300);
+            }, initDelay);
         } else if (isPaused) {
             updatePanelState('paused', '', currentIndex);
             console.log(`[${scriptInfo.name}] ⏸️ 暂停状态 (${siteConfig.name}, 序号: ${currentIndex})`);
@@ -780,9 +806,10 @@
         }
     }
 
+    const initDelay = GM_getValue('custom_init_delay', 500);
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', () => setTimeout(init, initDelay));
     } else {
-        init();
+        setTimeout(init, initDelay);
     }
 })();
