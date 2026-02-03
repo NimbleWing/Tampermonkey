@@ -121,7 +121,7 @@
                 position: fixed; bottom: 20px; right: 20px;
                 background: rgba(30,30,40,0.95); color: white; border-radius: 16px;
                 padding: 18px; box-shadow: 0 6px 30px rgba(0,0,0,0.5);
-                z-index: 2147483647; font-family: 'Segoe UI', system-ui;
+                z-index: 2147483647 !important; font-family: 'Segoe UI', system-ui;
                 min-width: 260px; border: 1px solid rgba(255,255,255,0.1);
             ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
