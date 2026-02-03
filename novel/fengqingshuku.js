@@ -116,13 +116,20 @@
 
         const panel = document.createElement('div');
         panel.id = 'novel-control-panel';
+        panel.style.cssText = `
+            position: fixed; left: 20px; top: 20px;
+            background: rgba(30,30,40,0.95); color: white; border-radius: 16px;
+            box-shadow: 0 6px 30px rgba(0,0,0,0.5);
+            z-index: 2147483647 !important; font-family: 'Segoe UI', system-ui;
+            min-width: 260px; border: 1px solid rgba(255,255,255,0.1);
+        `;
         panel.innerHTML = `
             <div class="drag-handle" style="
                 position: absolute; top: 0; left: 0; right: 0; height: 35px;
                 cursor: grab; border-radius: 16px 16px 0 0; z-index: 10;
             "></div>
             <div style="
-                position: relative; padding-top: 35px;
+                position: relative; padding: 18px; padding-top: 45px;
             ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
                     <div style="
@@ -182,16 +189,11 @@
                 </div>
             </div>
             <style>
-                @keyframes pulse {
-                    0% { opacity: 0.6; transform: scale(0.95); }
-                    50% { opacity: 1; transform: scale(1); }
-                    100% { opacity: 0.6; transform: scale(0.95); }
-                }
+                @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
                 .drag-handle:hover { background: rgba(255,255,255,0.05); }
                 #novel-control-panel button:hover {
                     transform: translateY(-1px);
                     box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                    transition: all 0.2s;
                 }
                 #novel-control-panel button:active { transform: translateY(0); }
             </style>
