@@ -36,19 +36,21 @@
             DELAY_MIN: 2500,
             DELAY_MAX: 4000,
             MAX_RETRY: 3,
-            SHOW_TOAST: true
+            SHOW_TOAST: true,
+            CONTENT_WHITELIST: []
         },
         'site-fengqingshuku': {
-            name: '风情书库',
+            name: '疯情书库',
             matchPatterns: ['*://*/read-*.html'],
             TITLE_SELECTOR: '.chapter_title',
             CONTENT_SELECTOR: '.chapter_con p',
             NAV_SELECTOR: '.prev_next',
             NEXT_KEYWORD: '下一章',
-            DELAY_MIN: 2500,
-            DELAY_MAX: 4000,
+            DELAY_MIN: 1500,
+            DELAY_MAX: 2000,
             MAX_RETRY: 3,
-            SHOW_TOAST: true
+            SHOW_TOAST: true,
+            CONTENT_WHITELIST: []
         },
          'site-hjwzw': {
             name: '黄金书屋',
@@ -60,7 +62,8 @@
             DELAY_MIN: 2500,
             DELAY_MAX: 4000,
             MAX_RETRY: 3,
-            SHOW_TOAST: true
+            SHOW_TOAST: true,
+            CONTENT_WHITELIST: []
         }
     };
 
@@ -423,6 +426,26 @@
             .slice(0, 60);
     }
 
+    function cleanParagraph(pElement, whitelist) {
+        const clone = pElement.cloneNode(true);
+
+        function filterElement(element) {
+            const children = Array.from(element.childNodes);
+            children.forEach(child => {
+                if (child.nodeType === Node.ELEMENT_NODE) {
+                    if (!whitelist.includes(child.tagName.toLowerCase())) {
+                        element.removeChild(child);
+                    } else {
+                        filterElement(child);
+                    }
+                }
+            });
+        }
+
+        filterElement(clone);
+        return clone.textContent.trim();
+    }
+
     function generateFilename(index, rawTitle) {
         const cleanTitle = sanitizeFilename(rawTitle);
         return `${index}##${cleanTitle}.txt`;
@@ -436,8 +459,9 @@
         const paragraphs = document.querySelectorAll(siteConfig.CONTENT_SELECTOR);
         if (paragraphs.length === 0) throw new Error('无法找到章节内容');
 
+        const whitelist = siteConfig.CONTENT_WHITELIST || [];
         const content = Array.from(paragraphs)
-            .map(p => p.innerText.trim())
+            .map(p => cleanParagraph(p, whitelist))
             .filter(t => t)
             .join('\n\n');
 
@@ -596,8 +620,9 @@
             const paragraphs = document.querySelectorAll(siteConfig.CONTENT_SELECTOR);
             if (paragraphs.length === 0) throw new Error('无法找到章节内容');
 
+            const whitelist = siteConfig.CONTENT_WHITELIST || [];
             const content = Array.from(paragraphs)
-                .map(p => p.innerText.trim())
+                .map(p => cleanParagraph(p, whitelist))
                 .filter(t => t)
                 .join('\n\n');
 
