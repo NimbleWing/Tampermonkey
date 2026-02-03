@@ -35,6 +35,8 @@
             NEXT_KEYWORDS: ['下一章'],
             PREV_KEYWORDS: ['上一章', '目录', '返回', '首页'],
             STRICT_NEXT_MODE: true,
+            NOVEL_TITLE_SELECTOR: '',
+            NOVEL_AUTHOR_SELECTOR: '',
             DELAY_MIN: 2500,
             DELAY_MAX: 4000,
             MAX_RETRY: 3,
@@ -50,6 +52,8 @@
             NEXT_KEYWORDS: ['下一章'],
             PREV_KEYWORDS: ['上一章', '目录', '返回', '首页'],
             STRICT_NEXT_MODE: true,
+            NOVEL_TITLE_SELECTOR: '.page_head a',
+            NOVEL_AUTHOR_SELECTOR: '.chapter_info_mid',
             DELAY_MIN: 1500,
             DELAY_MAX: 2000,
             MAX_RETRY: 3,
@@ -65,6 +69,8 @@
             NEXT_KEYWORDS: ['下一章'],
             PREV_KEYWORDS: ['上一章', '目录', '返回', '首页'],
             STRICT_NEXT_MODE: true,
+            NOVEL_TITLE_SELECTOR: '',
+            NOVEL_AUTHOR_SELECTOR: '',
             DELAY_MIN: 2500,
             DELAY_MAX: 4000,
             MAX_RETRY: 3,
@@ -116,6 +122,33 @@
         return newIndex;
     }
 
+    function getNovelInfo() {
+        return GM_getValue('novel_downloader_novel_info', { title: '', author: '' });
+    }
+
+    function setNovelInfo(info) {
+        GM_setValue('novel_downloader_novel_info', info);
+    }
+
+    function clearNovelInfo() {
+        GM_deleteValue('novel_downloader_novel_info');
+    }
+
+    function extractNovelInfo(siteConfig) {
+        const titleEl = document.querySelector(siteConfig.NOVEL_TITLE_SELECTOR);
+        const authorEl = document.querySelector(siteConfig.NOVEL_AUTHOR_SELECTOR);
+        const title = titleEl?.innerText?.trim() || '';
+
+        let author = '';
+        if (authorEl) {
+            const text = authorEl.innerText || '';
+            const match = text.match(/作者[：:]\s*([^更新\s]+)/);
+            author = match ? match[1].trim() : '';
+        }
+
+        return { title, author };
+    }
+
     // ================== 🎨 控制面板 ==================
     function createControlPanel(currentIndex, siteConfig) {
         if (document.getElementById('novel-control-panel')) return;
@@ -163,6 +196,11 @@
 
                 <div style="font-size:12px; color:#60a5fa; margin-bottom: 6px;">
                     📍 ${siteConfig.name}
+                </div>
+
+                <div style="font-size:12px; color:#94a3b8; margin: 4px 0; line-height: 1.5;">
+                    <div>📚 书名: <span id="novel-title" style="color:#cbd5e1">-</span></div>
+                    <div>✍️ 作者: <span id="novel-author" style="color:#cbd5e1">-</span></div>
                 </div>
 
                 <div style="font-size:13px; color:#94a3b8; margin: 6px 0; line-height: 1.5;">
@@ -591,8 +629,10 @@
         const chapters = getMergeChapters();
         if (chapters.length === 0) return;
 
-        const novelName = sanitizeFilename(getMergeCurrentTitle() || 'merged_novel');
-        const filename = `merged_${novelName}.txt`;
+        const novelInfo = getNovelInfo();
+        const novelName = sanitizeFilename(novelInfo.title || '未命名');
+        const authorName = sanitizeFilename(novelInfo.author || '未知');
+        const filename = `${novelName}【${authorName}】.txt`;
         const content = chapters
             .map(chap => `【${chap.title}】\n${chap.content}`)
             .join('\n\n');
@@ -828,6 +868,21 @@
         const mergeKey = getStateKey(siteConfig.siteKey, 'merge_mode');
 
         createControlPanel(currentIndex, siteConfig);
+
+        const novelInfo = extractNovelInfo(siteConfig);
+        if (novelInfo.title || novelInfo.author) {
+            setNovelInfo(novelInfo);
+            const titleEl = document.getElementById('novel-title');
+            const authorEl = document.getElementById('novel-author');
+            if (titleEl) {
+                const displayTitle = novelInfo.title.length > 12 ? novelInfo.title.slice(0, 12) + '...' : novelInfo.title;
+                titleEl.textContent = displayTitle;
+            }
+            if (authorEl) {
+                authorEl.textContent = novelInfo.author || '-';
+            }
+            console.log(`[${scriptInfo.name}] 📚 小说信息: ${novelInfo.title} | ✍️ 作者: ${novelInfo.author}`);
+        }
 
         const isActive = GM_getValue(stateKey, false);
         const isPaused = GM_getValue(pauseKey, false);
