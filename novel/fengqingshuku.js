@@ -118,12 +118,11 @@
         panel.id = 'novel-control-panel';
         panel.innerHTML = `
             <div style="
-                position: fixed; bottom: 20px; right: 20px;
+                position: fixed; left: 20px; top: auto; right: auto; bottom: 20px;
                 background: rgba(30,30,40,0.95); color: white; border-radius: 16px;
-                padding: 18px; box-shadow: 0 6px 30px rgba(0,0,0,0.5);
+                padding: 18px; padding-top: 50px; box-shadow: 0 6px 30px rgba(0,0,0,0.5);
                 z-index: 2147483647 !important; font-family: 'Segoe UI', system-ui;
                 min-width: 260px; border: 1px solid rgba(255,255,255,0.1);
-                cursor: move;
             ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
                     <div style="
@@ -206,44 +205,53 @@
         const savedPos = GM_getValue(getStateKey(siteConfig.siteKey, 'panel_pos'), null);
         if (savedPos) {
             panel.style.left = savedPos.left + 'px';
+            panel.style.top = savedPos.top + 'px';
             panel.style.right = 'auto';
-            panel.style.bottom = savedPos.bottom + 'px';
+            panel.style.bottom = 'auto';
         }
 
-        let isDragging = false;
-        let startX, startY, startLeft, startBottom;
+        const dragHandle = document.createElement('div');
+        dragHandle.style.cssText = `
+            position: absolute; top: 0; left: 0; right: 0; height: 40px;
+            cursor: move; z-index: 10; border-radius: 16px 16px 0 0;
+        `;
+        panel.insertBefore(dragHandle, panel.firstChild);
 
-        panel.addEventListener('mousedown', (e) => {
-            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+        let isDragging = false;
+        let startX, startY, startLeft, startTop;
+
+        dragHandle.addEventListener('mousedown', (e) => {
             isDragging = true;
             startX = e.clientX;
             startY = e.clientY;
             const rect = panel.getBoundingClientRect();
             startLeft = rect.left;
-            startBottom = window.innerHeight - rect.bottom;
-            panel.style.cursor = 'grabbing';
+            startTop = rect.top;
+            dragHandle.style.cursor = 'grabbing';
             e.preventDefault();
+            e.stopPropagation();
         });
 
         document.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
             const dx = e.clientX - startX;
-            const dy = startY - e.clientY;
+            const dy = e.clientY - startY;
             const newLeft = Math.max(0, startLeft + dx);
-            const newBottom = Math.max(0, startBottom + dy);
+            const newTop = Math.max(0, startTop + dy);
             panel.style.left = newLeft + 'px';
+            panel.style.top = newTop + 'px';
             panel.style.right = 'auto';
-            panel.style.bottom = newBottom + 'px';
+            panel.style.bottom = 'auto';
         });
 
         document.addEventListener('mouseup', () => {
             if (!isDragging) return;
             isDragging = false;
-            panel.style.cursor = 'move';
+            dragHandle.style.cursor = 'move';
             const rect = panel.getBoundingClientRect();
             GM_setValue(getStateKey(siteConfig.siteKey, 'panel_pos'), {
                 left: rect.left,
-                bottom: window.innerHeight - rect.bottom
+                top: rect.top
             });
         });
 
