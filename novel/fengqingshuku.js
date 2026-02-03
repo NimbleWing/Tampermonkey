@@ -5,6 +5,7 @@
 // @description  点击「开始下载」自动保存章节 → 按序号生成文件 → 自动翻页 → 支持多网站
 // @author       AI Assistant
 // @match        *://*/read-*.html
+// @match        https://tw.hjwzw.com/Book/Read/*
 // @grant        GM_download
 // @grant        GM_notification
 // @grant        GM_setValue
@@ -464,6 +465,14 @@
                 onerror: reject
             });
         });
+    }
+
+    function startDownloadFlow(siteConfig) {
+        if (isStopping) return;
+        GM_setValue(getStateKey(siteConfig.siteKey, 'active'), true);
+        GM_deleteValue(getStateKey(siteConfig.siteKey, 'paused'));
+        updatePanelState('running');
+        processChapter(siteConfig);
     }
 
     function startMergeDownloadFlow(siteConfig) {
