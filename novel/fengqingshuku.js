@@ -117,12 +117,12 @@
         const panel = document.createElement('div');
         panel.id = 'novel-control-panel';
         panel.innerHTML = `
+            <div class="drag-handle" style="
+                position: absolute; top: 0; left: 0; right: 0; height: 35px;
+                cursor: grab; border-radius: 16px 16px 0 0; z-index: 10;
+            "></div>
             <div style="
-                position: fixed; left: 20px; top: auto; right: auto; bottom: 20px;
-                background: rgba(30,30,40,0.95); color: white; border-radius: 16px;
-                padding: 18px; padding-top: 50px; box-shadow: 0 6px 30px rgba(0,0,0,0.5);
-                z-index: 2147483647 !important; font-family: 'Segoe UI', system-ui;
-                min-width: 260px; border: 1px solid rgba(255,255,255,0.1);
+                position: relative; padding-top: 35px;
             ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
                     <div style="
@@ -130,7 +130,7 @@
                         background: #64748b;
                         animation: pulse 2s infinite;
                     " id="status-dot"></div>
-                    <strong style="font-size: 15px; background: linear-gradient(90deg, #60a5fa, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center;">
+                    <strong style="font-size: 15px; background: linear-gradient(90deg, #60a5fa, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
                         ${iconHtml}${displayName}
                     </strong>
                 </div>
@@ -180,25 +180,21 @@
                 ">
                     💡 文件名格式: <span style="color:#f472b6; font-weight:500">1##标题.txt</span><br>
                 </div>
-
-                <style>
-                    @keyframes pulse {
-                        0% { opacity: 0.6; transform: scale(0.95); }
-                        50% { opacity: 1; transform: scale(1); }
-                        100% { opacity: 0.6; transform: scale(0.95); }
-                    }
-                    #novel-control-panel:hover {
-                        box-shadow: 0 8px 40px rgba(0,0,0,0.6) !important;
-                    }
-                    #novel-control-panel button:hover {
-                        transform: translateY(-1px);
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                        transition: all 0.2s;
-                    }
-                    #novel-control-panel button:active {
-                        transform: translateY(0);
-                    }
-                </style>
+            </div>
+            <style>
+                @keyframes pulse {
+                    0% { opacity: 0.6; transform: scale(0.95); }
+                    50% { opacity: 1; transform: scale(1); }
+                    100% { opacity: 0.6; transform: scale(0.95); }
+                }
+                .drag-handle:hover { background: rgba(255,255,255,0.05); }
+                #novel-control-panel button:hover {
+                    transform: translateY(-1px);
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+                    transition: all 0.2s;
+                }
+                #novel-control-panel button:active { transform: translateY(0); }
+            </style>
         `;
         document.body.appendChild(panel);
 
@@ -210,16 +206,10 @@
             panel.style.bottom = 'auto';
         }
 
-        const dragHandle = document.createElement('div');
-        dragHandle.style.cssText = `
-            position: absolute; top: 0; left: 0; right: 0; height: 40px;
-            cursor: move; z-index: 10; border-radius: 16px 16px 0 0;
-        `;
-        panel.insertBefore(dragHandle, panel.firstChild);
-
         let isDragging = false;
         let startX, startY, startLeft, startTop;
 
+        const dragHandle = panel.querySelector('.drag-handle');
         dragHandle.addEventListener('mousedown', (e) => {
             isDragging = true;
             startX = e.clientX;
@@ -229,7 +219,6 @@
             startTop = rect.top;
             dragHandle.style.cursor = 'grabbing';
             e.preventDefault();
-            e.stopPropagation();
         });
 
         document.addEventListener('mousemove', (e) => {
@@ -247,7 +236,7 @@
         document.addEventListener('mouseup', () => {
             if (!isDragging) return;
             isDragging = false;
-            dragHandle.style.cursor = 'move';
+            dragHandle.style.cursor = 'grab';
             const rect = panel.getBoundingClientRect();
             GM_setValue(getStateKey(siteConfig.siteKey, 'panel_pos'), {
                 left: rect.left,
